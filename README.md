@@ -41,6 +41,9 @@ This repository contains the configuration to deploy Clawdbot to Fly.io with aut
    - `DISCORD_BOT_TOKEN` - Your Discord bot token
    - `DISCORD_GUILD_ID` - Your Discord server/guild ID (automatically replaces `YOUR_GUILD_ID` placeholder in config)
    - Add other channel tokens as needed
+   - `TAILSCALE_AUTHKEY` - Tailscale auth key (for private access)
+   - `TAILSCALE_HOSTNAME` - Optional hostname override
+   - `TAILSCALE_SERVE` - Set to `1` to enable `tailscale serve`
 
 4. **Deploy:**
    - Push to the `main` branch to trigger automatic deployment via GitHub Actions
@@ -55,6 +58,8 @@ After deployment, you can:
    flyctl open
    ```
    Or visit: `https://flying-jarvis.fly.dev/`
+
+   If you enable Tailscale, the Control UI is available on your tailnet instead.
    
    The default config is automatically created on first run. You can customize it through the UI or by editing `/data/clawdbot.json` directly.
 
@@ -94,5 +99,6 @@ The application automatically creates a default config at `/data/clawdbot.json` 
 - **OOM/Memory Issues:** The fly.toml is configured with 2GB RAM (recommended). If issues persist, increase memory.
 - **Gateway lock issues:** If the gateway won't start, delete lock files: `flyctl ssh console -C "rm -f /data/gateway.*.lock"`
 - **Config not persisting:** Ensure `CLAWDBOT_STATE_DIR=/data` is set (already configured in fly.toml)
+- **Tailscale not reachable:** Ensure `TAILSCALE_AUTHKEY` is set and `TAILSCALE_SERVE=1` is enabled
 
 For more details, see the [official Clawdbot Fly.io documentation](https://docs.clawd.bot/platforms/fly.md).
