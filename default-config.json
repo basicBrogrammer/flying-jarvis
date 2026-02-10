@@ -40,7 +40,8 @@
   },
   "gateway": {
     "mode": "local",
-    "bind": "auto"
+    "bind": "auto",
+    "port": 3000
   },
   "meta": {
     "lastTouchedVersion": "2026.1.29"

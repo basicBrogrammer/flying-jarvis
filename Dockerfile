@@ -8,7 +8,7 @@ RUN corepack enable
 
 # Install git to clone the repository and cloudflared for tunnel access
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git ca-certificates curl gnupg && \
+    apt-get install -y --no-install-recommends git ca-certificates curl gnupg lsof && \
     curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null && \
     echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main" \
       | tee /etc/apt/sources.list.d/cloudflared.list >/dev/null && \
@@ -59,4 +59,4 @@ RUN chmod +x /app/docker-entrypoint.sh
 ENV NODE_ENV=production
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/index.js", "gateway", "run", "--allow-unconfigured", "--port", "3000", "--bind", "auto"]

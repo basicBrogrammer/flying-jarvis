@@ -150,6 +150,33 @@ flyctl machine restart <machine-id> -a <your-fly-app-name>
 - Confirm tunnel ingress target is `http://127.0.0.1:3000`.
 - Check Cloudflare Zero Trust dashboard for connector health.
 
+### Discord not responding
+
+- Confirm `DISCORD_BOT_TOKEN` is set in Fly secrets.
+- Confirm `DISCORD_GUILD_ID` matches the target Discord server.
+- Verify gateway reachability:
+
+```bash
+openclaw gateway probe
+openclaw status --deep
+openclaw gateway health --url ws://127.0.0.1:3000 --token "$OPENCLAW_GATEWAY_TOKEN"
+```
+
+- If health/probe reports `connect ECONNREFUSED`, start in foreground mode:
+
+```bash
+openclaw gateway run --allow-unconfigured --port 3000 --bind auto
+```
+
+- Re-check channels:
+
+```bash
+openclaw channels list
+openclaw status
+```
+
+- If you intentionally use `--force`, ensure `lsof` is installed in the image.
+
 ### Control UI auth issues
 
 - Verify `OPENCLAW_GATEWAY_TOKEN` is set.

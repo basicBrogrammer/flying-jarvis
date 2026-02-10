@@ -90,6 +90,65 @@ if (config.gateway.controlUi.allowInsecureAuth !== desiredAllowInsecureAuth) {
 NODE
 }
 
+maybe_sync_gateway_port() {
+  local desired_port_raw desired_port
+  desired_port_raw="${OPENCLAW_GATEWAY_PORT:-}"
+  if [ -z "$desired_port_raw" ]; then
+    return
+  fi
+
+  if ! [[ "$desired_port_raw" =~ ^[0-9]+$ ]]; then
+    echo "OPENCLAW_GATEWAY_PORT is not numeric ($desired_port_raw); skipping gateway port sync."
+    return
+  fi
+  desired_port="$desired_port_raw"
+
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Config file not found at $CONFIG_FILE; skipping gateway port sync."
+    return
+  fi
+
+  CONFIG_FILE="$CONFIG_FILE" OPENCLAW_GATEWAY_PORT="$desired_port" node - <<'NODE'
+const fs = require("fs");
+
+const configPath = process.env.CONFIG_FILE;
+const desiredPort = Number(process.env.OPENCLAW_GATEWAY_PORT);
+if (!configPath || Number.isNaN(desiredPort)) {
+  console.error("Missing CONFIG_FILE or OPENCLAW_GATEWAY_PORT; skipping gateway port sync.");
+  process.exit(0);
+}
+if (!fs.existsSync(configPath)) {
+  console.error(`Config file not found at ${configPath}; skipping gateway port sync.`);
+  process.exit(0);
+}
+
+let raw;
+try {
+  raw = fs.readFileSync(configPath, "utf8");
+} catch (err) {
+  console.error(`Failed to read config at ${configPath}: ${err}`);
+  process.exit(1);
+}
+
+let config;
+try {
+  config = JSON.parse(raw);
+} catch (err) {
+  console.error(`Failed to parse config JSON at ${configPath}: ${err}`);
+  process.exit(1);
+}
+
+config.gateway = config.gateway ?? {};
+if (config.gateway.port !== desiredPort) {
+  config.gateway.port = desiredPort;
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+  console.log(`Set gateway.port=${desiredPort} in config.`);
+} else {
+  console.log(`gateway.port already ${desiredPort}; leaving config as-is.`);
+}
+NODE
+}
+
 # Start Cloudflare Tunnel if configured
 if command -v cloudflared >/dev/null 2>&1; then
   cloudflare_token_raw="${CLOUDFLARE_TUNNEL_TOKEN:-}"
@@ -107,9 +166,16 @@ maybe_trim_gateway_token
 # Initialize config file if it doesn't exist
 CONFIG_DIR="${OPENCLAW_STATE_DIR:-/data}"
 CONFIG_FILE="$CONFIG_DIR/openclaw.json"
+CREDENTIALS_DIR="$CONFIG_DIR/credentials"
+SESSIONS_DIR="$CONFIG_DIR/agents/main/sessions"
 
 # Create config directory if it doesn't exist
 mkdir -p "$CONFIG_DIR"
+chmod 700 "$CONFIG_DIR" || true
+
+# Ensure required runtime directories exist with restrictive permissions.
+mkdir -p "$CREDENTIALS_DIR" "$SESSIONS_DIR"
+chmod 700 "$CREDENTIALS_DIR" || true
 
 # Handle config reset if requested
 if is_truthy "${RESET_CONFIG:-}"; then
@@ -142,6 +208,7 @@ if [ -n "${DISCORD_GUILD_ID}" ]; then
 fi
 
 maybe_sync_insecure_control_ui
+maybe_sync_gateway_port
 
 # Log config path on startup (without dumping contents)
 if [ -f "$CONFIG_FILE" ]; then
