@@ -38,16 +38,16 @@ For exact commands and values, follow the runbook sections:
 - validation: [`6) Validate after deploy`](./onboarding-and-operations.md#6-validate-after-deploy)
 - operations + troubleshooting: [`7) Operations`](./onboarding-and-operations.md#7-operations) and [`8) Common troubleshooting`](./onboarding-and-operations.md#8-common-troubleshooting)
 
-## Agent-first startup model
+## Startup sidecar model
 
-Startup behavior is volume-managed, not git-managed:
+Gateway startup is process-managed from git, while sidecars are volume-managed:
 
-- Runner: `/app/bin/startup-runner.sh`
+- Main app process: `node dist/index.js gateway run --allow-unconfigured --port 3000 --bind auto`
 - Persistent startup scripts: `/data/startup`
-- Persistent startup logs: `/data/logs/startup-runner.log`
+- Persistent startup script logs: `/data/logs/startup-scripts.log`
+- Startup script PID snapshot: `/data/logs/startup-scripts.current.tsv`
 
-This allows adding/updating startup daemons directly on the machine without changing Docker CMD or committing new startup scripts.
-On first boot, the runner initializes `/data/startup/80-openclaw.daemon.sh` so OpenClaw still starts by default.
+At boot, `docker-entrypoint.sh` runs all `.sh` files in `/data/startup` as best-effort background sidecars.
 
 Agent docs shipped in the image:
 
@@ -59,8 +59,8 @@ Agent docs shipped in the image:
 Use prompts like:
 
 1. `Read /app/docs/agent/readme.md and /app/docs/agent/env.md, then summarize the startup model and log locations.`
-2. `Diagnose startup issues using only bounded log reads (tail/rg), and show the current daemon snapshot from /data/logs/startup-daemons.current.tsv.`
-3. `Add or update a startup daemon script in /data/startup, make it executable, and verify it appears in runner logs/process state.`
+2. `Diagnose startup issues using only bounded log reads (tail/rg), and show the current startup script snapshot from /data/logs/startup-scripts.current.tsv.`
+3. `Add or update a startup sidecar script in /data/startup, then verify it appears in /data/logs/startup-scripts.log and /data/logs/startup-scripts.current.tsv.`
 
 ## Reference docs
 

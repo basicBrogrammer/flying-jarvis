@@ -174,9 +174,8 @@ flyctl logs -a <your-fly-app-name>
 For in-machine debugging (no `flyctl` required), use bounded reads from persistent logs:
 
 ```bash
-tail -n 200 /data/logs/startup-runner.log
-tail -n 200 /data/logs/startup-processes.log
-sed -n '1,120p' /data/logs/startup-daemons.current.tsv
+tail -n 200 /data/logs/startup-scripts.log
+sed -n '1,120p' /data/logs/startup-scripts.current.tsv
 ```
 
 ### SSH into machine
@@ -185,31 +184,34 @@ sed -n '1,120p' /data/logs/startup-daemons.current.tsv
 flyctl ssh console -a <your-fly-app-name>
 ```
 
-### Manage startup behavior on persistent volume
+### Manage startup sidecars on persistent volume
 
-Startup scripts are loaded from `/data/startup` at boot:
+Startup sidecar scripts are loaded from `/data/startup` at boot by `docker-entrypoint.sh`:
 
-- executable files without `.daemon.` are oneshot scripts
-- executable files with `.daemon.` are background daemons
-- lexical filename order controls startup order
-- first boot auto-creates `/data/startup/80-openclaw.daemon.sh` (unless `STARTUP_BOOTSTRAP_OPENCLAW=0`)
+- only `.sh` files are considered
+- lexical filename order controls launch order
+- executable files run directly; non-executable `.sh` files run via `bash`
+- scripts run as best-effort background sidecars (they do not block gateway startup)
 
-Examples:
+Example sidecar:
 
 ```bash
 mkdir -p /data/startup
-cat >/data/startup/80-openclaw.daemon.sh <<'EOF'
+cat >/data/startup/40-gmail-triage.sh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-exec openclaw gateway run --allow-unconfigured --port 3000 --bind auto
+while true; do
+  /app/custom/gmail2-triage.sh
+  sleep 60
+done
 EOF
-chmod +x /data/startup/80-openclaw.daemon.sh
+chmod +x /data/startup/40-gmail-triage.sh
 ```
 
-The runner writes process metadata for easy management:
+Startup script telemetry:
 
-- `/data/logs/startup-daemons.current.tsv` for active daemon PID snapshot
-- `/data/logs/startup-processes.log` for start/exit events
+- `/data/logs/startup-scripts.current.tsv` for startup PID snapshot
+- `/data/logs/startup-scripts.log` for start/skip/exit events and script stdout/stderr
 
 ### Inspect config
 
@@ -298,5 +300,5 @@ flyctl ssh console -a <your-fly-app-name> -C "rm -f /data/gateway.*.lock"
 When first opening an in-machine agent session, useful prompts are:
 
 1. `Read /app/docs/agent/readme.md and /app/docs/agent/env.md, then summarize key paths and startup conventions.`
-2. `Use tail/rg only (no full log dumps) to diagnose startup failures from /data/logs/startup-runner.log and /data/logs/startup-processes.log.`
-3. `Show current daemon PIDs from /data/logs/startup-daemons.current.tsv and verify each PID with kill -0.`
+2. `Use tail/rg only (no full log dumps) to diagnose startup behavior from /data/logs/startup-scripts.log.`
+3. `Show current startup-script PIDs from /data/logs/startup-scripts.current.tsv and verify each PID with kill -0.`

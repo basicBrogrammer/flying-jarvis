@@ -45,11 +45,10 @@ RUN pnpm ui:build
 COPY default-config.json /app/default-config.json
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY scripts/sync-runtime-config.mjs /app/scripts/sync-runtime-config.mjs
-COPY bin/startup-runner.sh /app/bin/startup-runner.sh
 COPY docs/agent /app/docs/agent
-RUN chmod +x /app/docker-entrypoint.sh /app/bin/startup-runner.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 ENV NODE_ENV=production
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["/app/bin/startup-runner.sh"]
+CMD ["node", "dist/index.js", "gateway", "run", "--allow-unconfigured", "--port", "3000", "--bind", "auto"]

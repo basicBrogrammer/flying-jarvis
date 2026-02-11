@@ -1,47 +1,37 @@
 # Agent environment reference
 
-## Startup runner paths
+## Runtime model
 
-- Runner executable: `/app/bin/startup-runner.sh`
-- Startup script directory: `/data/startup`
-- Runner log directory: `/data/logs`
+- Main process: `node dist/index.js gateway run --allow-unconfigured --port 3000 --bind auto`
+- Entrypoint: `/app/docker-entrypoint.sh`
+- Startup sidecar script directory: `/data/startup`
+- Startup sidecar log directory: `/data/logs`
 
-## Runner output files
+## Startup sidecar output files
 
-- Runner + startup script output:
-  - `/data/logs/startup-runner.log`
-  - rotated backups: `/data/logs/startup-runner.log.1` ... `.N`
-- Daemon process events:
-  - `/data/logs/startup-processes.log`
-  - rotated backups: `/data/logs/startup-processes.log.1` ... `.N`
-- Current daemon snapshot:
-  - `/data/logs/startup-daemons.current.tsv`
+- Script lifecycle + output:
+  - `/data/logs/startup-scripts.log`
+- Startup script PID snapshot:
+  - `/data/logs/startup-scripts.current.tsv`
+
+`startup-scripts.log` lines are structured for parsing:
+
+- events: `event=start|skip|exit`, `name=...`, `pid=...`, `status=...`, `entry=...`
+- script output streams: `stream=stdout|stderr`, `name=...`, `entry=...`, `msg=...`
 
 ## Key environment variables
 
+- `OPENCLAW_STATE_DIR` (default: `/data`)
+- `OPENCLAW_WORKSPACE_DIR` (default: `${OPENCLAW_STATE_DIR}/workspace`)
+- `OPENCLAW_CONFIG_FILE` (set by entrypoint to `${OPENCLAW_STATE_DIR}/openclaw.json`)
 - `STARTUP_DIR` (default: `/data/startup`)
 - `STARTUP_LOG_DIR` (default: `/data/logs`)
-- `STARTUP_RUNNER_LOG` (default: `${STARTUP_LOG_DIR}/startup-runner.log`)
-- `STARTUP_PROCESS_LOG` (default: `${STARTUP_LOG_DIR}/startup-processes.log`)
-- `STARTUP_ACTIVE_DAEMONS_FILE` (default: `${STARTUP_LOG_DIR}/startup-daemons.current.tsv`)
-- `STARTUP_LOG_MAX_BYTES` (default: `1048576`)
-- `STARTUP_LOG_BACKUPS` (default: `5`)
-- `STARTUP_TERM_GRACE_SECONDS` (default: `10`)
-- `STARTUP_BOOTSTRAP_OPENCLAW` (default: `1`)
-- `STARTUP_BOOTSTRAP_EXAMPLE` (default: `1`)
+- `STARTUP_SCRIPT_LOG` (default: `${STARTUP_LOG_DIR}/startup-scripts.log`)
+- `STARTUP_SCRIPT_PIDS_FILE` (default: `${STARTUP_LOG_DIR}/startup-scripts.current.tsv`)
 
-## Bootstrapping behavior
+## Startup sidecar behavior
 
-On first boot, if `/data/startup` does not exist, the runner creates it.
-
-If `STARTUP_BOOTSTRAP_EXAMPLE=1`, the runner also writes:
-
-- `/data/startup/_example-openclaw.daemon.sh`
-
-That file starts with `_`, so it is ignored until renamed and marked executable.
-
-If `STARTUP_BOOTSTRAP_OPENCLAW=1`, the runner writes:
-
-- `/data/startup/80-openclaw.daemon.sh`
-
-This keeps first boot working without requiring a manual script drop-in.
+- only `.sh` regular files from `/data/startup` are considered
+- lexical filename order controls launch order
+- executable scripts run directly; non-executable scripts run via `bash`
+- scripts are launched as background sidecars and do not block gateway startup

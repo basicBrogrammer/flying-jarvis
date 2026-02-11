@@ -1,64 +1,62 @@
 # Agent runtime playbook
 
-This image includes a startup runner at `/app/bin/startup-runner.sh`.
+Main gateway process is started directly by the container command:
 
-The runner executes scripts from the persistent volume (`/data/startup`), not from git-tracked files. This means runtime behavior can be changed in-place by editing files under `/data/startup`, and those changes persist across deploys/restarts.
+- `node dist/index.js gateway run --allow-unconfigured --port 3000 --bind auto`
 
-On first boot, if `/data/startup` is missing, the runner creates it and bootstraps `/data/startup/80-openclaw.daemon.sh` by default.
+Startup sidecar scripts are loaded from the persistent volume (`/data/startup`) by `docker-entrypoint.sh`.
+This means sidecar behavior can be changed in-place by editing files under `/data/startup`, and those changes persist across deploys/restarts.
 
 ## First checks in a new session
 
 1. Read `/app/docs/agent/env.md`.
-2. Check runner health:
-   - `tail -n 120 /data/logs/startup-runner.log`
-   - `tail -n 120 /data/logs/startup-processes.log`
-3. Check active daemons:
-   - `sed -n '1,120p' /data/logs/startup-daemons.current.tsv`
+2. Check startup sidecar telemetry:
+   - `tail -n 120 /data/logs/startup-scripts.log`
+   - `sed -n '1,120p' /data/logs/startup-scripts.current.tsv`
+3. Confirm gateway liveness:
+   - `npx openclaw gateway health --url ws://127.0.0.1:3000 --token "$OPENCLAW_GATEWAY_TOKEN"`
 
-## Startup script conventions
+## Startup sidecar conventions
 
 - Directory: `/data/startup`
 - Order: lexical filename order
-- Ignore: files starting with `_`
-- Only regular + executable files run
-- Oneshot: executable filename does **not** contain `.daemon.`
-  - Runs synchronously
-  - Non-zero exit fails startup
-- Daemon: executable filename **does** contain `.daemon.`
-  - Runs in background
-  - Runner waits so PID 1 stays alive
+- Only `.sh` regular files are considered
+- Executable `.sh` files run directly
+- Non-executable `.sh` files run via `bash`
+- Scripts are launched as best-effort background sidecars
 
-### Example daemon script
+### Example sidecar script
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec openclaw gateway run --allow-unconfigured --port 3000 --bind auto
+while true; do
+  /app/custom/gmail2-triage.sh
+  sleep 60
+done
 ```
 
-Save as `/data/startup/80-openclaw.daemon.sh` and run `chmod +x /data/startup/80-openclaw.daemon.sh`.
+Save as `/data/startup/40-gmail-triage.sh` and run `chmod +x /data/startup/40-gmail-triage.sh`.
 
-## Process management
+## Sidecar process telemetry
 
-The runner writes daemon process metadata and events:
+Startup script logs are machine-parseable:
 
-- Active daemon snapshot: `/data/logs/startup-daemons.current.tsv`
-- Process lifecycle events: `/data/logs/startup-processes.log`
-- Combined runner + startup-script output: `/data/logs/startup-runner.log`
+- Startup PID snapshot: `/data/logs/startup-scripts.current.tsv`
+- Script lifecycle + output: `/data/logs/startup-scripts.log`
 
 Useful commands:
 
 - Verify a PID is alive: `kill -0 <pid>`
-- Stop a daemon: `kill -TERM <pid>`
+- Stop a sidecar: `kill -TERM <pid>`
 - Force stop only if needed: `kill -KILL <pid>`
 
 ## Keep context small while debugging
 
 Never read full logs when they can be large. Prefer bounded reads:
 
-- `tail -n 200 /data/logs/startup-runner.log`
-- `tail -n 200 /data/logs/startup-processes.log`
-- `rg "\\[startup\\]|error|failed|non-zero" /data/logs/startup-runner.log`
+- `tail -n 200 /data/logs/startup-scripts.log`
+- `rg "event=skip|event=exit|stream=stderr|error|failed" /data/logs/startup-scripts.log`
 
 When sharing findings, copy only the smallest relevant span.
