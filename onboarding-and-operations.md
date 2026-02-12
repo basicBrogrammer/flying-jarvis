@@ -6,7 +6,7 @@ This runbook is for deploying OpenClaw on Fly with Cloudflare Tunnel + Zero Trus
 
 If you want the shortest reliable setup:
 
-1. Set required GitHub Actions secrets (`FLY_*`, gateway token, tunnel token, and at least one provider key).
+1. Set required GitHub Actions secrets (`FLY_*`, gateway token, tunnel token, and at least one provider key). For internet webhook delivery, also set `OPENCLAW_HOOKS_TOKEN`.
 2. Deploy with workflow input `reset_config=true` (first deploy or when changing core auth/channel config).
 3. Open your Cloudflare hostname, then pair the browser/device once if prompted.
 4. Re-deploy later with `reset_config=false` for normal updates.
@@ -68,6 +68,9 @@ Required secrets:
 
 Optional:
 
+- `OPENCLAW_HOOKS_TOKEN` (required only when you want webhook endpoints enabled)
+- `OPENCLAW_HOOKS_PATH` (defaults to `/hooks`)
+- `OPENCLAW_HOOKS_ALLOWED_AGENT_IDS` (comma-separated allowlist for explicit `agentId`, defaults to `*`)
 - `DISCORD_BOT_TOKEN`
 - `DISCORD_GUILD_ID`
 - `DISCORD_CHANNEL_ID` (defaults to `general` when Discord is auto-configured)
@@ -79,6 +82,8 @@ Optional:
 Startup auto-wiring behaviors:
 
 - Provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) create matching `auth.profiles.*:default` entries when missing.
+- Startup ensures both `main` and `hooks` agents exist; use `hooks` as the default target for webhook workloads.
+- When `OPENCLAW_HOOKS_TOKEN` is set, startup enables `gateway.hooks`, writes the shared token, and keeps webhook path/agent allowlist aligned with env defaults (`/hooks`, `*`).
 - Startup selects `agents.defaults.model.primary` from available providers (priority: OpenAI, then Anthropic, then Google) and keeps fallbacks aligned with available provider keys.
 - When both `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` are set, startup enables Discord plugin/binding, sets `channels.discord.groupPolicy="open"`, enables wildcard channel access, and seeds a default channel key (`DISCORD_CHANNEL_ID` or `general`).
 
@@ -93,6 +98,9 @@ Use these examples when you populate GitHub repository secrets:
 | `FLY_REGION` | No | `iad` | `fly platform regions` | `iad` |
 | `OPENCLAW_GATEWAY_TOKEN` | Yes | `f0f57a7f...` (64 hex chars) | `openssl rand -hex 32` | n/a |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Yes | `eyJhIjoi...` | Cloudflare Zero Trust tunnel dashboard, or `cloudflared tunnel token <tunnel-name>` | n/a |
+| `OPENCLAW_HOOKS_TOKEN` | No (Yes for webhooks) | `c0ffeec0...` (64 hex chars) | `openssl rand -hex 32` | Unset (webhooks disabled) |
+| `OPENCLAW_HOOKS_PATH` | No | `/hooks` | Optional override for webhook base path | `/hooks` |
+| `OPENCLAW_HOOKS_ALLOWED_AGENT_IDS` | No | `*` or `main` or `main,hooks` | Optional explicit `agentId` allowlist | `*` |
 | `ANTHROPIC_API_KEY` | One provider key required | `sk-ant-...` | Anthropic Console | Unset unless you add it |
 | `OPENAI_API_KEY` | One provider key required | `sk-proj-...` | OpenAI API keys page | Unset unless you add it |
 | `GEMINI_API_KEY` | One provider key required | `AIza...` | Google AI Studio / Google Cloud credentials | Unset unless you add it |
@@ -135,8 +143,39 @@ Expected signs:
 
 - OpenClaw gateway started on port `3000`
 - cloudflared started with your tunnel token
+- if `OPENCLAW_HOOKS_TOKEN` is set, `/hooks/wake` and `/hooks/agent` are enabled
 
 Then open your Cloudflare-protected hostname and sign in through Access.
+
+### Validate webhook endpoint through Cloudflare Tunnel
+
+If you set `OPENCLAW_HOOKS_TOKEN`, test from any internet-reachable client with:
+
+```bash
+curl -X POST "https://<your-hostname>/hooks/wake" \
+  -H "CF-Access-Client-Id: <your-access-service-token-id>" \
+  -H "CF-Access-Client-Secret: <your-access-service-token-secret>" \
+  -H "Authorization: Bearer <OPENCLAW_HOOKS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Webhook test from Cloudflare","mode":"now"}'
+```
+
+And for an isolated agent run:
+
+```bash
+curl -X POST "https://<your-hostname>/hooks/agent" \
+  -H "CF-Access-Client-Id: <your-access-service-token-id>" \
+  -H "CF-Access-Client-Secret: <your-access-service-token-secret>" \
+  -H "Authorization: Bearer <OPENCLAW_HOOKS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Summarize recent alerts","name":"Webhook","agentId":"hooks","wakeMode":"now"}'
+```
+
+Session behavior notes:
+
+- `/hooks/agent` already defaults to a fresh random `sessionKey` per call when `sessionKey` is omitted.
+- For unrelated webhook events (like independent emails), omit `sessionKey` so each run stays isolated.
+- Only set a stable `sessionKey` when you intentionally want multi-turn continuity (for example, one key per email thread).
 
 ### First remote Control UI connection (pairing expected)
 
@@ -205,6 +244,13 @@ flyctl ssh console -a <your-fly-app-name> -C 'sh -lc "npx openclaw status --deep
 - Confirm `CLOUDFLARE_TUNNEL_TOKEN` is present in Fly secrets.
 - Confirm tunnel ingress target is `http://127.0.0.1:3000`.
 - Check Cloudflare Zero Trust dashboard for connector health.
+
+### Webhook calls fail
+
+- Confirm `OPENCLAW_HOOKS_TOKEN` is set in Fly secrets and redeploy if newly added.
+- Confirm your request includes both Cloudflare Access service-token headers and a valid OpenClaw hook token (`Authorization: Bearer <OPENCLAW_HOOKS_TOKEN>`).
+- Confirm the webhook path matches your config (`/hooks` by default, or `OPENCLAW_HOOKS_PATH` override).
+- If calling `/hooks/agent` with `agentId`, confirm it is included in `OPENCLAW_HOOKS_ALLOWED_AGENT_IDS` (or set `*`).
 
 ### Discord not responding
 

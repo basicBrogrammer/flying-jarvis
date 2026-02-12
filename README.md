@@ -6,6 +6,7 @@ Deploy [OpenClaw](https://openclaw.ai/) to [Fly.io](https://fly.io/) with:
 - persistent state volume
 - Cloudflare Tunnel
 - Cloudflare Zero Trust Access in front of Control UI
+- optional internet webhooks (`/hooks/*`) guarded by Cloudflare Access + OpenClaw hook token
 
 This README is intentionally high-level. Use the runbook as the source of truth for setup and operations:
 
@@ -27,6 +28,7 @@ This template is tuned for **private Fly deployment + Cloudflare Zero Trust**:
 4. Validate deploy health and access OpenClaw via your Cloudflare-protected hostname.
 5. If the Control UI shows `disconnected (1008): pairing required`, approve the pending device request from inside the Fly machine.
 6. For Discord setup, set `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` (optionally `DISCORD_CHANNEL_ID`); startup auto-configures Discord with open guild-channel policy and seeds a default channel key (`DISCORD_CHANNEL_ID` or `general`).
+7. For webhook setup, set `OPENCLAW_HOOKS_TOKEN` (optionally `OPENCLAW_HOOKS_PATH` and `OPENCLAW_HOOKS_ALLOWED_AGENT_IDS`), and target `agentId: "hooks"` in `/hooks/agent` payloads.
 
 For exact commands and values, follow the runbook sections:
 

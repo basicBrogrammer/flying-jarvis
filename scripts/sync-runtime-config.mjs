@@ -76,6 +76,18 @@ function arraysEqual(left, right) {
   return true;
 }
 
+function parseCsvList(value) {
+  if (!value) {
+    return [];
+  }
+  return toUniqueStrings(
+    value
+      .split(",")
+      .map((entry) => trimValue(entry))
+      .filter(Boolean),
+  );
+}
+
 // Order matters: first available provider becomes default primary model when current primary is missing/unusable.
 const providerDefaults = [
   {
@@ -119,9 +131,33 @@ const stateDir = trimValue(process.env.OPENCLAW_STATE_DIR) || "/data";
 const desiredWorkspace = trimValue(process.env.OPENCLAW_WORKSPACE_DIR) || `${stateDir}/workspace`;
 const agents = ensureObject(config, "agents");
 const defaults = ensureObject(agents, "defaults");
+const agentList = ensureArray(agents, "list");
 if (defaults.workspace !== desiredWorkspace) {
   defaults.workspace = desiredWorkspace;
   console.log(`Set agents.defaults.workspace=${desiredWorkspace}`);
+  changed = true;
+}
+
+const hasMainAgent = agentList.some(
+  (agent) => agent && typeof agent === "object" && trimValue(agent.id) === "main",
+);
+if (!hasMainAgent) {
+  agentList.push({
+    id: "main",
+    default: true,
+  });
+  console.log("Added agents.list entry for main");
+  changed = true;
+}
+
+const hasHooksAgent = agentList.some(
+  (agent) => agent && typeof agent === "object" && trimValue(agent.id) === "hooks",
+);
+if (!hasHooksAgent) {
+  agentList.push({
+    id: "hooks",
+  });
+  console.log("Added agents.list entry for hooks");
   changed = true;
 }
 
@@ -136,6 +172,61 @@ if (Object.prototype.hasOwnProperty.call(process.env, "OPENCLAW_CONTROL_UI_ALLOW
     console.log(`Set gateway.controlUi.allowInsecureAuth=${desiredAllowInsecureAuth}`);
     changed = true;
   }
+}
+
+const hooksToken = trimValue(process.env.OPENCLAW_HOOKS_TOKEN);
+const hooksPathEnv = trimValue(process.env.OPENCLAW_HOOKS_PATH);
+const hooksAllowedAgentIdsEnv = Object.prototype.hasOwnProperty.call(
+  process.env,
+  "OPENCLAW_HOOKS_ALLOWED_AGENT_IDS",
+)
+  ? trimValue(process.env.OPENCLAW_HOOKS_ALLOWED_AGENT_IDS)
+  : null;
+const gateway = ensureObject(config, "gateway");
+const hooks = ensureObject(gateway, "hooks");
+
+const desiredHooksPath = hooksPathEnv || "/hooks";
+if (hooks.path !== desiredHooksPath) {
+  hooks.path = desiredHooksPath;
+  console.log(`Set gateway.hooks.path=${desiredHooksPath}`);
+  changed = true;
+}
+
+if (hooksToken) {
+  if (hooks.enabled !== true) {
+    hooks.enabled = true;
+    console.log("Set gateway.hooks.enabled=true");
+    changed = true;
+  }
+  if (hooks.token !== hooksToken) {
+    hooks.token = hooksToken;
+    console.log("Set gateway.hooks.token from OPENCLAW_HOOKS_TOKEN");
+    changed = true;
+  }
+} else if (hooks.enabled === true && !trimValue(hooks.token)) {
+  // Keep webhook config safe-by-default if enabled without a token.
+  hooks.enabled = false;
+  console.log("Set gateway.hooks.enabled=false (missing token)");
+  changed = true;
+}
+
+if (hooksAllowedAgentIdsEnv !== null) {
+  const desiredAllowedAgentIds =
+    hooksAllowedAgentIdsEnv === ""
+      ? []
+      : parseCsvList(hooksAllowedAgentIdsEnv);
+  const currentAllowedAgentIds = Array.isArray(hooks.allowedAgentIds) ? hooks.allowedAgentIds : [];
+  if (!arraysEqual(currentAllowedAgentIds, desiredAllowedAgentIds)) {
+    hooks.allowedAgentIds = desiredAllowedAgentIds;
+    console.log(
+      `Set gateway.hooks.allowedAgentIds=${JSON.stringify(desiredAllowedAgentIds)}`,
+    );
+    changed = true;
+  }
+} else if (!Array.isArray(hooks.allowedAgentIds)) {
+  hooks.allowedAgentIds = ["*"];
+  console.log('Set gateway.hooks.allowedAgentIds=["*"]');
+  changed = true;
 }
 
 const auth = ensureObject(config, "auth");

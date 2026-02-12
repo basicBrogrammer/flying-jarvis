@@ -95,6 +95,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -z "${OPENCLAW_HOOKS_TOKEN}" ]; then
+            echo "::notice title=Webhooks disabled by default::OPENCLAW_HOOKS_TOKEN is not set, so gateway webhooks remain disabled. Set this secret to enable /hooks endpoints."
+          fi
+
           if [ -n "${DISCORD_BOT_TOKEN}" ] && [ -z "${DISCORD_GUILD_ID}" ]; then
             echo "::warning title=Discord auto-wiring skipped::DISCORD_BOT_TOKEN is set but DISCORD_GUILD_ID is missing. Set both values to auto-configure Discord channels."
           fi
@@ -111,6 +115,7 @@ jobs:
             echo "::notice title=Model auto-selection::Only GEMINI_API_KEY is set. Startup will choose google/gemini-3-pro-preview as the primary model."
           fi
         env:
+          OPENCLAW_HOOKS_TOKEN: ${{ secrets.OPENCLAW_HOOKS_TOKEN }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
@@ -130,6 +135,9 @@ jobs:
           [ -n "${ANTHROPIC_API_KEY}" ] && SECRETS+=("ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}")
           [ -n "${OPENAI_API_KEY}" ] && SECRETS+=("OPENAI_API_KEY=${OPENAI_API_KEY}")
           [ -n "${GEMINI_API_KEY}" ] && SECRETS+=("GEMINI_API_KEY=${GEMINI_API_KEY}")
+          [ -n "${OPENCLAW_HOOKS_TOKEN}" ] && SECRETS+=("OPENCLAW_HOOKS_TOKEN=${OPENCLAW_HOOKS_TOKEN}")
+          [ -n "${OPENCLAW_HOOKS_PATH}" ] && SECRETS+=("OPENCLAW_HOOKS_PATH=${OPENCLAW_HOOKS_PATH}")
+          [ -n "${OPENCLAW_HOOKS_ALLOWED_AGENT_IDS}" ] && SECRETS+=("OPENCLAW_HOOKS_ALLOWED_AGENT_IDS=${OPENCLAW_HOOKS_ALLOWED_AGENT_IDS}")
           [ -n "${DISCORD_BOT_TOKEN}" ] && SECRETS+=("DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}")
           [ -n "${DISCORD_GUILD_ID}" ] && SECRETS+=("DISCORD_GUILD_ID=${DISCORD_GUILD_ID}")
           [ -n "${DISCORD_CHANNEL_ID}" ] && SECRETS+=("DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}")
@@ -148,6 +156,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENCLAW_HOOKS_TOKEN: ${{ secrets.OPENCLAW_HOOKS_TOKEN }}
+          OPENCLAW_HOOKS_PATH: ${{ secrets.OPENCLAW_HOOKS_PATH }}
+          OPENCLAW_HOOKS_ALLOWED_AGENT_IDS: ${{ secrets.OPENCLAW_HOOKS_ALLOWED_AGENT_IDS }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
