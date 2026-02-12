@@ -16,119 +16,6 @@ is_truthy() {
   esac
 }
 
-timestamp_utc() {
-  date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
-
-append_startup_log_line() {
-  local line
-  line="$1"
-  printf '%s\n' "$line" >> "$STARTUP_SCRIPT_LOG"
-}
-
-write_startup_directory_guide() {
-  local guide_file
-  guide_file="${STARTUP_SCRIPT_DIR}/00-startup-directory-guide.ignored.sh"
-  if [ -f "$guide_file" ]; then
-    return
-  fi
-
-  cat > "$guide_file" <<'EOF'
-#!/usr/bin/env bash
-# Startup scripts directory guide
-#
-# This file is intentionally ignored because its filename contains ".ignored.".
-# The startup loader in /app/docker-entrypoint.sh skips any file with ".ignored."
-# in the filename.
-#
-# How /data/startup works:
-# - All regular files with a ".sh" filename are launched at boot.
-# - Executable ".sh" files run directly.
-# - Non-executable ".sh" files run via "bash <file>".
-# - Scripts are launched in lexical filename order as background sidecars.
-# - Script output and lifecycle events are written to:
-#     /data/logs/startup-scripts.log
-# - Startup PID snapshot is written to:
-#     /data/logs/startup-scripts.current.tsv
-#
-# Recommended naming:
-# - 10-*.sh, 20-*.sh, 30-*.sh ... to control ordering.
-# - Include ".ignored." in filename for notes/examples you do not want to run.
-EOF
-  chmod 0644 "$guide_file"
-}
-
-launch_startup_script() {
-  local entry name pid started_at
-  entry="$1"
-  name="$(basename "$entry")"
-  started_at="$(timestamp_utc)"
-
-  (
-    local status
-    set +e
-    if [ -x "$entry" ]; then
-      "$entry"
-      status="$?"
-    else
-      bash "$entry"
-      status="$?"
-    fi
-    append_startup_log_line "$(printf '%s\tevent=exit\tname=%s\tpid=%s\tstatus=%s\tentry=%s' "$(timestamp_utc)" "$name" "$BASHPID" "$status" "$entry")"
-    exit "$status"
-  ) \
-    > >(
-      while IFS= read -r line || [ -n "$line" ]; do
-        append_startup_log_line "$(printf '%s\tstream=stdout\tname=%s\tentry=%s\tmsg=%s' "$(timestamp_utc)" "$name" "$entry" "$line")"
-      done
-    ) \
-    2> >(
-      while IFS= read -r line || [ -n "$line" ]; do
-        append_startup_log_line "$(printf '%s\tstream=stderr\tname=%s\tentry=%s\tmsg=%s' "$(timestamp_utc)" "$name" "$entry" "$line")"
-      done
-    ) &
-
-  pid="$!"
-  append_startup_log_line "$(printf '%s\tevent=start\tname=%s\tpid=%s\tentry=%s' "$started_at" "$name" "$pid" "$entry")"
-  printf '%s\t%s\t%s\t%s\n' "$started_at" "$name" "$pid" "$entry" >> "$STARTUP_SCRIPT_PIDS_FILE"
-}
-
-start_startup_scripts() {
-  local entries entry name
-  mkdir -p "$STARTUP_SCRIPT_DIR" "$STARTUP_LOG_DIR"
-  write_startup_directory_guide
-  : > "$STARTUP_SCRIPT_LOG"
-  : > "$STARTUP_SCRIPT_PIDS_FILE"
-  printf '# started_at_utc\tname\tpid\tentry\n' >> "$STARTUP_SCRIPT_PIDS_FILE"
-
-  shopt -s nullglob
-  entries=("$STARTUP_SCRIPT_DIR"/*)
-  shopt -u nullglob
-
-  if [ "${#entries[@]}" -eq 0 ]; then
-    append_startup_log_line "$(printf '%s\tevent=info\tmsg=%s' "$(timestamp_utc)" "no startup scripts found")"
-    return
-  fi
-
-  mapfile -d '' entries < <(printf '%s\0' "${entries[@]}" | LC_ALL=C sort -z)
-  for entry in "${entries[@]}"; do
-    name="$(basename "$entry")"
-    if [ ! -f "$entry" ]; then
-      append_startup_log_line "$(printf '%s\tevent=skip\tname=%s\treason=%s\tentry=%s' "$(timestamp_utc)" "$name" "not-a-regular-file" "$entry")"
-      continue
-    fi
-    if [[ "$name" == *".ignored."* ]]; then
-      append_startup_log_line "$(printf '%s\tevent=skip\tname=%s\treason=%s\tentry=%s' "$(timestamp_utc)" "$name" "filename-ignored" "$entry")"
-      continue
-    fi
-    if [[ "$name" != *.sh ]]; then
-      append_startup_log_line "$(printf '%s\tevent=skip\tname=%s\treason=%s\tentry=%s' "$(timestamp_utc)" "$name" "not-shell-script" "$entry")"
-      continue
-    fi
-    launch_startup_script "$entry"
-  done
-}
-
 trim_gateway_token() {
   local raw trimmed
   raw="${OPENCLAW_GATEWAY_TOKEN:-}"
@@ -166,11 +53,6 @@ CREDENTIALS_DIR="$CONFIG_DIR/credentials"
 SESSIONS_DIR="$CONFIG_DIR/agents/main/sessions"
 WORKSPACE_SEED_DIR="/root/.openclaw/workspace"
 PERSISTENT_WORKSPACE="${OPENCLAW_WORKSPACE_DIR:-$CONFIG_DIR/workspace}"
-STARTUP_SCRIPT_DIR="${STARTUP_DIR:-/data/startup}"
-STARTUP_LOG_DIR="${STARTUP_LOG_DIR:-/data/logs}"
-STARTUP_SCRIPT_LOG="${STARTUP_SCRIPT_LOG:-${STARTUP_LOG_DIR}/startup-scripts.log}"
-STARTUP_SCRIPT_PIDS_FILE="${STARTUP_SCRIPT_PIDS_FILE:-${STARTUP_LOG_DIR}/startup-scripts.current.tsv}"
-
 trim_gateway_token
 start_cloudflare_tunnel
 
@@ -212,7 +94,5 @@ if [ -f "$CONFIG_FILE" ]; then
 else
   echo "Warning: Config file not found at $CONFIG_FILE"
 fi
-
-start_startup_scripts
 
 exec "$@"

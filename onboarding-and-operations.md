@@ -171,49 +171,11 @@ If `channels list` shows no channels or no auth providers, re-check secrets and 
 flyctl logs -a <your-fly-app-name>
 ```
 
-For in-machine debugging (no `flyctl` required), use bounded reads from persistent logs:
-
-```bash
-tail -n 200 /data/logs/startup-scripts.log
-sed -n '1,120p' /data/logs/startup-scripts.current.tsv
-```
-
 ### SSH into machine
 
 ```bash
 flyctl ssh console -a <your-fly-app-name>
 ```
-
-### Manage startup sidecars on persistent volume
-
-Startup sidecar scripts are loaded from `/data/startup` at boot by `docker-entrypoint.sh`:
-
-- only `.sh` files are considered
-- lexical filename order controls launch order
-- files containing `.ignored.` in the filename are skipped
-- executable files run directly; non-executable `.sh` files run via `bash`
-- scripts run as best-effort background sidecars (they do not block gateway startup)
-- `/data/startup/00-startup-directory-guide.ignored.sh` is auto-created with in-place usage notes
-
-Example sidecar:
-
-```bash
-mkdir -p /data/startup
-cat >/data/startup/40-gmail-triage.sh <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-while true; do
-  /app/custom/gmail2-triage.sh
-  sleep 60
-done
-EOF
-chmod +x /data/startup/40-gmail-triage.sh
-```
-
-Startup script telemetry:
-
-- `/data/logs/startup-scripts.current.tsv` for startup PID snapshot
-- `/data/logs/startup-scripts.log` for start/skip/exit events and script stdout/stderr
 
 ### Inspect config
 
@@ -301,6 +263,6 @@ flyctl ssh console -a <your-fly-app-name> -C "rm -f /data/gateway.*.lock"
 
 When first opening an in-machine agent session, useful prompts are:
 
-1. `Read /app/docs/agent/readme.md and /app/docs/agent/env.md, then summarize key paths and startup conventions.`
-2. `Use tail/rg only (no full log dumps) to diagnose startup behavior from /data/logs/startup-scripts.log.`
-3. `Show current startup-script PIDs from /data/logs/startup-scripts.current.tsv and verify each PID with kill -0.`
+1. `Read /app/docs/agent/readme.md and /app/docs/agent/env.md, then summarize key paths and runtime conventions.`
+2. `Use bounded log reads to diagnose gateway startup and identify the first fatal event.`
+3. `Check gateway health and channel status, then summarize any blocking errors.`
